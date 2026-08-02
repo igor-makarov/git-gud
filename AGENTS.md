@@ -15,19 +15,18 @@
 - Go 1.26 or newer is required by `go.mod`.
 - Tooling is managed by mise. `mise.toml` selects Go and `mise.lock` pins the
   toolchain for macOS ARM64 and Linux x64.
-- Install the development toolchain with `mise install`.
-- Run Go commands through `mise exec --` when the shell is not already activated
-  by mise.
+- Install the development toolchain with `mise install`. Shell startup activates
+  mise, so invoke project tools directly.
 
 ## Validation
 
 Before committing Go changes, run:
 
 ```sh
-mise exec -- gofmt -w readme.go cmd internal
-mise exec -- go test -race ./...
-mise exec -- go vet ./...
-mise exec -- go build ./cmd/git-gud
+gofmt -w readme.go cmd internal
+go test -race ./...
+go vet ./...
+go build ./cmd/git-gud
 git diff --check
 ```
 
@@ -53,6 +52,10 @@ filesystem behavior. Keep command parsing tests close to `internal/command` or
 ## Releases
 
 - Release tags are annotated and use `vX.Y.Z`.
-- Validate the tree before tagging and push both `main` and the tag.
+- Validate the tree before tagging and push both `main` and the tag. A tag push
+  runs `.github/workflows/release.yml` and publishes GoReleaser archives,
+  checksums, and attestations to GitHub Releases.
+- `.goreleaser.yaml` builds stripped Linux, macOS, and Windows binaries. Keep its
+  linker-injected version synchronized with `buildVersion` in `cmd/git-gud`.
 - `go install ...@latest` derives the displayed version from Go build metadata;
-  no generated version file is needed.
+  no generated version file is needed for source installs.

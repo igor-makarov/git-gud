@@ -6,7 +6,10 @@ runs a `git` subprocess.
 
 ## Install
 
-Install the latest release with Go 1.26 or newer:
+Prebuilt archives for Linux, macOS, and Windows are available from
+[GitHub Releases](https://github.com/igor-makarov/git-gud/releases).
+
+Install from source with Go 1.26 or newer:
 
 ```sh
 go install github.com/igor-makarov/git-gud/cmd/git-gud@latest

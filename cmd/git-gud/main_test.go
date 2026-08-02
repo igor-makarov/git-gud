@@ -22,6 +22,15 @@ func TestReadmeFlag(t *testing.T) {
 	}
 }
 
+func TestBuildVersion(t *testing.T) {
+	previous := buildVersion
+	buildVersion = "v1.2.3"
+	t.Cleanup(func() { buildVersion = previous })
+	if got := version(); got != "v1.2.3" {
+		t.Fatalf("version() = %q, want v1.2.3", got)
+	}
+}
+
 func TestUsagePointsToReadme(t *testing.T) {
 	var output bytes.Buffer
 	usage(&output)
