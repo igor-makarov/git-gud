@@ -35,7 +35,7 @@ mise exec -- go build ./cmd/git-gud
 ```text
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] ls [-R|--recursive] [DIR]
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] find [--from DIR] GLOB
-git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] DIR
+git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] DIR
 ```
 
 `REF` defaults to `HEAD` of the remote's default branch. It may be a branch,
@@ -81,12 +81,14 @@ Download a directory's contents recursively into the current directory:
 git gud https://github.com/owner/repo.git download assets
 ```
 
-Choose an exact destination directory with `-o`:
+Choose an exact destination directory with `-o` and control concurrent file
+extraction with `--jobs` (default: 8):
 
 ```sh
-git gud https://github.com/owner/repo.git download -o ./vendor/assets assets
+git gud https://github.com/owner/repo.git download -o ./vendor/assets --jobs 8 assets
 ```
 
+Fresh files are written directly; existing files are replaced atomically.
 Regular files, executable modes, and symbolic links are preserved. Git
 submodules are rejected rather than treated as files.
 

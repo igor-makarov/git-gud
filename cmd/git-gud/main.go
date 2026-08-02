@@ -82,7 +82,7 @@ func usage(writer io.Writer) {
 	fmt.Fprintln(writer, `Usage:
   git gud [GLOBAL FLAGS] REPOSITORY[@REF] ls [-R|--recursive] [DIR]
   git gud [GLOBAL FLAGS] REPOSITORY[@REF] find [--from DIR] GLOB
-  git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] DIR
+  git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] DIR
 
 REF defaults to HEAD of the remote's default branch. REPOSITORY must be an
 HTTP(S) smart Git URL. Find supports doublestar globs such as Specs/*/*/*/* and

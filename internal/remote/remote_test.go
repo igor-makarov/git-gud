@@ -82,29 +82,35 @@ func TestListAndFind(t *testing.T) {
 func TestDownload(t *testing.T) {
 	repository := fixtureRepository(t)
 	target := t.TempDir()
-	if err := repository.Download(context.Background(), "Specs/0/1/2", target); err != nil {
+	if err := repository.Download(context.Background(), "Specs", target, 4); err != nil {
 		t.Fatal(err)
 	}
-	contents, err := os.ReadFile(filepath.Join(target, "Alpha.json"))
-	if err != nil {
-		t.Fatal(err)
+	for path, expected := range map[string]string{
+		"0/1/2/Alpha.json": "alpha\n",
+		"f/e/d/Zulu.txt":   "zulu\n",
+	} {
+		contents, err := os.ReadFile(filepath.Join(target, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(contents) != expected {
+			t.Fatalf("downloaded %q, want %q", contents, expected)
+		}
 	}
-	if string(contents) != "alpha\n" {
-		t.Fatalf("downloaded %q", contents)
+	if err := repository.Download(context.Background(), "Specs", target, 4); err != nil {
+		t.Fatalf("overwrite download: %v", err)
 	}
 }
 
 func TestDownloadRejectsExistingSymlinkDirectory(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+	destination := filepath.Join(root, "escape")
+	if err := os.Symlink(outside, destination); err != nil {
 		t.Skipf("symlinks are unavailable: %v", err)
 	}
-	if err := ensureDirectoryUnder(root, "escape/child"); err == nil {
+	if err := ensureChildDirectory(destination); err == nil {
 		t.Fatal("expected symlink directory to be rejected")
-	}
-	if _, err := os.Stat(filepath.Join(outside, "child")); !os.IsNotExist(err) {
-		t.Fatalf("path was created outside target: %v", err)
 	}
 }
 
