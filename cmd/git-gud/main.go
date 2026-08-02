@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"syscall"
 
+	gitgud "github.com/igor-makarov/git-gud"
 	"github.com/igor-makarov/git-gud/internal/command"
 	"github.com/igor-makarov/git-gud/internal/remote"
 )
@@ -28,6 +29,7 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	batchSize := global.Int("batch-size", remote.DefaultBatchSize, "maximum object wants per smart HTTP fetch")
 	showProgress := global.Bool("progress", false, "show remote Git progress")
 	showVersion := global.Bool("version", false, "show version")
+	showReadme := global.Bool("readme", false, "show complete documentation")
 	global.Usage = func() { usage(stderr) }
 	if err := global.Parse(arguments); err != nil {
 		return err
@@ -35,6 +37,10 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	if *showVersion {
 		fmt.Fprintln(stdout, version())
 		return nil
+	}
+	if *showReadme {
+		_, err := fmt.Fprint(stdout, gitgud.README)
+		return err
 	}
 	args := global.Args()
 	if len(args) < 2 {
@@ -80,19 +86,21 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 
 func usage(writer io.Writer) {
 	fmt.Fprintln(writer, `Usage:
-  git gud [GLOBAL FLAGS] REPOSITORY[@REF] ls [-R|--recursive] [DIR]
-  git gud [GLOBAL FLAGS] REPOSITORY[@REF] find [--from DIR] GLOB
-  git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] DIR
+  git gud [FLAGS] REPOSITORY[@REF] COMMAND [ARGS]
 
-REF defaults to HEAD of the remote's default branch. REPOSITORY must be an
-HTTP(S) smart Git URL. Find supports doublestar globs such as Specs/*/*/*/* and
-**/*.json.
+Commands:
+  ls [-R|--recursive] [DIR]
+  find [--from DIR] GLOB
+  download [-o|--output DIR] [--jobs N] DIR
 
-Global flags:
-  --cache-dir DIR   Bare Git cache (default: user cache directory)
-  --batch-size N    Object wants per fetch (default: 4096)
-  --progress        Show Git sideband progress
-  --version         Show version`)
+Flags:
+  --cache-dir DIR
+  --batch-size N
+  --progress
+  --version
+  --readme
+
+Run 'git gud --readme' for complete documentation.`)
 }
 
 func version() string {

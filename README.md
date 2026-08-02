@@ -1,9 +1,8 @@
 # git-gud
 
-`git gud` is a CLI client for listing, finding, and downloading paths from remote
-Git repositories without cloning their complete history or blobs. It talks to
-HTTP(S) remotes with Git smart protocol v2 and uses go-git—never a `git`
-subprocess.
+`git gud` lists, finds, and downloads paths from remote Git repositories without
+requiring a full clone. It uses Git smart protocol v2 through go-git and never
+runs a `git` subprocess.
 
 ## Install
 
@@ -20,14 +19,10 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
 Git discovers the installed `git-gud` executable as the `git gud` subcommand.
-
-For development from a checkout, mise resolves `go = "latest"`; `mise.lock`
-locks the exact toolchain for macOS ARM64 and Linux x64:
+The complete documentation is also embedded in the executable:
 
 ```sh
-mise install
-mise exec -- go test ./...
-mise exec -- go build ./cmd/git-gud
+git gud --readme
 ```
 
 ## Usage
@@ -38,8 +33,15 @@ git gud [GLOBAL FLAGS] REPOSITORY[@REF] find [--from DIR] GLOB
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] DIR
 ```
 
-`REF` defaults to `HEAD` of the remote's default branch. It may be a branch,
-tag, full `refs/...` name, or full object ID. Branch names containing `/` work:
+Global flags must precede `REPOSITORY`. Use `--` after command options when a
+positional argument begins with `-`.
+
+`REPOSITORY` must be an HTTP(S) smart Git URL. URL userinfo may provide
+credentials; userinfo is removed before deriving the persistent cache key and
+is not written to the cached remote configuration.
+
+`REF` defaults to the remote's default branch. It may be a branch, tag, full
+`refs/...` name, or full object ID. Quote the argument when needed by the shell:
 
 ```sh
 git gud 'https://github.com/owner/repo.git@feature/fast' ls src
@@ -47,7 +49,9 @@ git gud 'https://github.com/owner/repo.git@feature/fast' ls src
 
 ### List
 
-List one directory without downloading its blobs:
+List the direct children of a directory without downloading their blobs. `DIR`
+defaults to the repository root (`.`), and non-recursive output contains
+basenames:
 
 ```sh
 git gud https://github.com/owner/repo.git ls src
@@ -56,12 +60,16 @@ git gud https://github.com/owner/repo.git ls src
 Recursively list repository-relative paths:
 
 ```sh
-git gud https://github.com/owner/repo.git ls -R Specs
+git gud https://github.com/CocoaPods/Specs.git ls -R Specs
 ```
+
+Both files and directories are listed.
 
 ### Find
 
-Find supports doublestar syntax (`*`, `?`, character classes, and `**`):
+Find files and directories with doublestar patterns. Supported syntax includes
+`*`, `?`, character classes, and `**` for any number of path components. Quote
+patterns to prevent the shell from expanding them:
 
 ```sh
 git gud https://github.com/CocoaPods/Specs.git find 'Specs/*/*/*/*'
@@ -69,74 +77,81 @@ git gud https://github.com/owner/repo.git find '**/*.json'
 git gud https://github.com/owner/repo.git find --from assets '**/icon-?.svg'
 ```
 
-`--from` resolves the scope first, so unrelated trees are never requested.
-Matches include both files and directories and are printed as paths from the
-repository root.
+`--from` defaults to the repository root and resolves the scope before matching,
+so unrelated trees are not requested. Patterns are interpreted relative to the
+scope, while matches are printed as paths from the repository root.
 
 ### Download
 
-Download a directory's contents recursively into the current directory:
+Recursively download a directory's contents into the current directory:
 
 ```sh
 git gud https://github.com/owner/repo.git download assets
 ```
 
-Choose an exact destination directory with `-o` and control concurrent file
-extraction with `--jobs` (default: 8):
+Choose a destination and set the bounded extraction concurrency with `--jobs`
+(default: 8):
 
 ```sh
-git gud https://github.com/owner/repo.git download -o ./vendor/assets --jobs 8 assets
+git gud https://github.com/owner/repo.git download \
+  --output ./vendor/assets \
+  --jobs 8 \
+  assets
 ```
 
-Fresh files are written directly; existing files are replaced atomically.
-Regular files, executable modes, and symbolic links are preserved. Git
-submodules are rejected rather than treated as files.
+The source directory itself is not created in the destination; its contents are
+placed directly in the output directory. Fresh files are written directly and
+existing files are replaced atomically. Regular files, Git executable modes,
+and symbolic links are preserved. Existing output directories must be real
+directories rather than symbolic links. Git submodules are rejected.
+
+Download overlays the destination. It does not remove destination entries that
+are absent from the selected Git snapshot, so reusing an output directory is
+not an exact mirroring operation.
 
 ## Global flags
 
 ```text
---cache-dir DIR   Bare Git cache (default: the OS user cache directory)
+--cache-dir DIR   Bare Git cache (default: OS user cache directory/git-gud)
 --batch-size N    Maximum object wants per fetch (default: 4096)
---progress        Show Git sideband progress
---version         Show version
+--progress        Show remote Git sideband progress
+--version         Show the installed module version
+--readme          Print this README
 ```
 
-Set `GIT_GUD_CACHE_DIR` to configure the cache without a flag.
+Set `GIT_GUD_CACHE_DIR` to configure the cache without a flag. A command-line
+`--cache-dir` value takes precedence.
 
-## Git-native cache and fetch strategy
+## Cache and fetch behavior
 
-Each credential-free remote URL maps to a standard bare repository under:
+Each remote URL, with userinfo removed, maps to a standard bare repository:
 
 ```text
 $CACHE_DIR/repos/<sha256-of-url>.git
 ```
 
 The cache uses normal Git objects, refs, packs, shallow metadata, and promisor
-pack markers. `remote.origin.promisor=true` and
-`remote.origin.partialclonefilter=tree:0` make the intentionally missing
-objects valid to ordinary Git tooling. Credentials from URL userinfo are used
-for transport but are not written to the cache config.
+pack markers. It can be inspected and maintained with ordinary Git tooling.
+A per-repository process lock prevents concurrent git-gud commands from
+modifying the same cache.
 
 For every command, git-gud:
 
-1. negotiates smart protocol v2 and resolves only the requested ref with
-   `ls-refs` prefixes;
-2. fetches a new commit at depth one with `filter tree:0`;
-3. lazily fetches only needed tree object IDs, batching up to `--batch-size`
-   wants and sending the shallow commit boundary;
+1. negotiates smart protocol v2 and resolves the requested ref;
+2. fetches a missing commit at depth one with `filter tree:0`;
+3. lazily fetches only required tree object IDs in bounded batches;
 4. fetches no blobs for `ls` or `find`;
-5. batches and streams only selected blobs for `download`.
+5. fetches and retains required blobs for `download`.
 
-A scoped or fixed-prefix glob therefore avoids unrelated subtrees. Broad globs
-such as `**` necessarily inspect every matching tree, but packs are streamed to
-disk and retained for later commands. A per-repository process lock protects
-cache updates.
+A scoped path or fixed-prefix glob therefore avoids unrelated subtrees. Broad
+patterns such as `**` necessarily inspect all trees under their scope. Cached
+objects are retained for later commands.
 
 ## Requirements and limitations
 
-- The remote must support HTTP(S) smart protocol v2, shallow fetches, and object
-  filters.
-- SHA-1 and SHA-256 object IDs are accepted; server and storage support still
-  depend on go-git.
-- The project currently uses `go-git/v6` alpha because protocol-v2 client
-  support is not available in the stable v5 API.
+- The remote must support HTTP(S) Git smart protocol v2, shallow fetches, and
+  object filters.
+- SSH and local filesystem remotes are not supported.
+- A full object ID must be accepted by the server as a reachable request.
+- SHA-1 and SHA-256 object IDs are parsed; practical SHA-256 support also
+  depends on the remote and go-git storage support.
