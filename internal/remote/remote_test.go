@@ -127,8 +127,12 @@ func TestMarkPromisorPacks(t *testing.T) {
 	if err := markPromisorPacks(cache); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(packDir, "pack-deadbeef.promisor")); err != nil {
+	marker := filepath.Join(packDir, "pack-deadbeef.promisor")
+	if err := os.Chmod(marker, 0o444); err != nil {
 		t.Fatal(err)
+	}
+	if err := markPromisorPacks(cache); err != nil {
+		t.Fatalf("mark existing read-only promisor pack: %v", err)
 	}
 }
 

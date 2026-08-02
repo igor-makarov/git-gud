@@ -219,7 +219,10 @@ func markPromisorPacks(cachePath string) error {
 	}
 	for _, pack := range packs {
 		marker := strings.TrimSuffix(pack, ".pack") + ".promisor"
-		file, err := os.OpenFile(marker, os.O_CREATE|os.O_WRONLY, 0o644)
+		file, err := os.OpenFile(marker, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if os.IsExist(err) {
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("mark promisor pack: %w", err)
 		}
