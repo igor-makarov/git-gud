@@ -94,7 +94,7 @@ submodules are rejected rather than treated as files.
 
 ```text
 --cache-dir DIR   Bare Git cache (default: the OS user cache directory)
---batch-size N    Maximum object wants per fetch (default: 512)
+--batch-size N    Maximum object wants per fetch (default: 4096)
 --progress        Show Git sideband progress
 --version         Show version
 ```

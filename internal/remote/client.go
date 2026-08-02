@@ -23,7 +23,8 @@ import (
 	"github.com/gofrs/flock"
 )
 
-const defaultBatchSize = 512
+// DefaultBatchSize is the maximum number of object wants sent in one fetch.
+const DefaultBatchSize = 4096
 
 // Options configures a Client.
 type Options struct {
@@ -54,7 +55,7 @@ func NewClient(options Options) (*Client, error) {
 	}
 	batchSize := options.BatchSize
 	if batchSize <= 0 {
-		batchSize = defaultBatchSize
+		batchSize = DefaultBatchSize
 	}
 	return &Client{cacheDir: cacheDir, batchSize: batchSize, progress: options.Progress}, nil
 }

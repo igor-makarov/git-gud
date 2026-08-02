@@ -25,7 +25,7 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	global := flag.NewFlagSet("git gud", flag.ContinueOnError)
 	global.SetOutput(stderr)
 	cacheDir := global.String("cache-dir", os.Getenv("GIT_GUD_CACHE_DIR"), "bare repository cache directory")
-	batchSize := global.Int("batch-size", 512, "maximum object wants per smart HTTP fetch")
+	batchSize := global.Int("batch-size", remote.DefaultBatchSize, "maximum object wants per smart HTTP fetch")
 	showProgress := global.Bool("progress", false, "show remote Git progress")
 	showVersion := global.Bool("version", false, "show version")
 	global.Usage = func() { usage(stderr) }
@@ -90,7 +90,7 @@ HTTP(S) smart Git URL. Find supports doublestar globs such as Specs/*/*/*/* and
 
 Global flags:
   --cache-dir DIR   Bare Git cache (default: user cache directory)
-  --batch-size N    Object wants per fetch (default: 512)
+  --batch-size N    Object wants per fetch (default: 4096)
   --progress        Show Git sideband progress
   --version         Show version`)
 }
