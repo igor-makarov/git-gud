@@ -12,14 +12,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
+	objectcache "github.com/go-git/go-git/v6/plumbing/cache"
 	"github.com/go-git/go-git/v6/plumbing/protocol"
 	"github.com/go-git/go-git/v6/plumbing/protocol/capability"
 	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	httptransport "github.com/go-git/go-git/v6/plumbing/transport/http"
+	"github.com/go-git/go-git/v6/storage/filesystem"
 	"github.com/gofrs/flock"
 )
 
@@ -179,9 +182,21 @@ func (c *Client) Open(ctx context.Context, target Target) (_ *Repository, err er
 }
 
 func openBareCache(cachePath, remoteURL string) (*git.Repository, error) {
-	repository, err := git.PlainOpen(cachePath)
+	if err := os.MkdirAll(cachePath, 0o755); err != nil {
+		return nil, fmt.Errorf("create bare cache: %w", err)
+	}
+	cacheFS := osfs.New(cachePath, osfs.WithBoundOS(), osfs.WithMmap())
+	storer := filesystem.NewStorageWithOptions(
+		cacheFS,
+		objectcache.NewObjectLRUDefault(),
+		filesystem.Options{
+			ExclusiveAccess: true,
+			UseInMemoryIdx:  true,
+		},
+	)
+	repository, err := git.Open(storer, nil)
 	if errors.Is(err, git.ErrRepositoryNotExists) {
-		repository, err = git.PlainInit(cachePath, true)
+		repository, err = git.Init(storer)
 		if err != nil {
 			return nil, fmt.Errorf("initialize bare cache: %w", err)
 		}

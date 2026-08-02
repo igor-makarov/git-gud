@@ -114,6 +114,22 @@ func TestDownloadRejectsExistingSymlinkDirectory(t *testing.T) {
 	}
 }
 
+func TestOpenBareCache(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), "repository.git")
+	for range 2 {
+		repository, err := openBareCache(cache, "https://example.com/repository.git")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repository.Remote("origin"); err != nil {
+			t.Fatal(err)
+		}
+		if err := repository.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestMarkPromisorPacks(t *testing.T) {
 	cache := t.TempDir()
 	packDir := filepath.Join(cache, "objects", "pack")
