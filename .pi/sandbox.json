@@ -1,0 +1,7 @@
+{
+  "unsandboxedCommands": [
+    "gh run list *",
+    "gh run view *",
+    "gh run watch *"
+  ]
+}
