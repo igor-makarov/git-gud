@@ -69,10 +69,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attest release archives
+      - name: Collect attestation subjects
+        id: attestation_subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          subjects="$(find dist -maxdepth 1 -type f | sort)"
+          if [[ -z "$subjects" ]]; then
+            echo "no release artifacts found to attest" >&2
+            exit 1
+          fi
+          {
+            echo "subjects<<EOF"
+            printf '%s\n' "$subjects"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Attest release artifacts
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
-          subject-path: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
+          subject-path: ${{ steps.attestation_subjects.outputs.subjects }}

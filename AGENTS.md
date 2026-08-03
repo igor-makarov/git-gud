@@ -54,7 +54,7 @@ filesystem behavior. Keep command parsing tests close to `internal/command` or
 - Release tags are annotated and use `vX.Y.Z`.
 - Validate the tree before tagging and push both `main` and the tag. A tag push
   runs `.github/workflows/release.yml` and publishes GoReleaser archives,
-  checksums, and attestations to GitHub Releases.
+  CycloneDX SBOMs, checksums, and attestations to GitHub Releases.
 - `.goreleaser.yaml` builds stripped Linux, macOS, and Windows binaries. Keep its
   linker-injected version synchronized with `buildVersion` in `cmd/git-gud`.
 - `go install ...@latest` derives the displayed version from Go build metadata;

@@ -5,3 +5,4 @@ lockfile_platforms = ["macos-arm64", "linux-x64"]
 [tools]
 go = "latest"
 goreleaser = "latest"
+syft = "latest"

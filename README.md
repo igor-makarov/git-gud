@@ -7,7 +7,8 @@ runs a `git` subprocess.
 ## Install
 
 Prebuilt archives for Linux, macOS, and Windows are available from
-[GitHub Releases](https://github.com/igor-makarov/git-gud/releases).
+[GitHub Releases](https://github.com/igor-makarov/git-gud/releases). Each
+archive has a CycloneDX JSON software bill of materials (SBOM).
 
 Install from source with Go 1.26 or newer:
 

@@ -42,6 +42,15 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+sboms:
+  - id: syft-json
+    artifacts: archive
+    cmd: syft
+    args:
+      - "$artifact"
+      - "-o"
+      - "cyclonedx-json=$document"
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next+{{ .ShortCommit }}"
 
