@@ -3,5 +3,8 @@
     "gh run list *",
     "gh run view *",
     "gh run watch *"
-  ]
+  ],
+  "filesystem": {
+    "allowWrite": ["~/Library/Caches/go-build"]
+  }
 }
