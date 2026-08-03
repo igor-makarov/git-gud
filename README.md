@@ -25,8 +25,10 @@ Git discovers the installed `git-gud` executable as the `git gud` subcommand.
 The complete documentation is also embedded in the executable:
 
 ```sh
-git gud --readme
+git gud --help
 ```
+
+`--readme` is an alias for `--help`.
 
 ## Usage
 
@@ -119,7 +121,7 @@ not an exact mirroring operation.
 --batch-size N    Maximum object wants per fetch (default: 4096)
 --progress        Show remote Git sideband progress
 --version         Show the installed module version
---readme          Print this README
+--help, --readme  Print this README
 ```
 
 Set `GIT_GUD_CACHE_DIR` to configure the cache without a flag. A command-line

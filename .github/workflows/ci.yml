@@ -57,8 +57,10 @@ jobs:
 
       - name: Verify embedded README
         run: |
-          "$RUNNER_TEMP/git-gud" --readme > "$RUNNER_TEMP/README.md"
-          cmp README.md "$RUNNER_TEMP/README.md"
+          "$RUNNER_TEMP/git-gud" --help > "$RUNNER_TEMP/README.help.md"
+          "$RUNNER_TEMP/git-gud" --readme > "$RUNNER_TEMP/README.readme.md"
+          cmp README.md "$RUNNER_TEMP/README.help.md"
+          cmp README.md "$RUNNER_TEMP/README.readme.md"
 
       - name: Check whitespace
         run: git diff --check

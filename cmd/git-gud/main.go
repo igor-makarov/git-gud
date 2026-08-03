@@ -29,6 +29,7 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	batchSize := global.Int("batch-size", remote.DefaultBatchSize, "maximum object wants per smart HTTP fetch")
 	showProgress := global.Bool("progress", false, "show remote Git progress")
 	showVersion := global.Bool("version", false, "show version")
+	showHelp := global.Bool("help", false, "show complete documentation")
 	showReadme := global.Bool("readme", false, "show complete documentation")
 	global.Usage = func() { usage(stderr) }
 	if err := global.Parse(arguments); err != nil {
@@ -38,7 +39,7 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, version())
 		return nil
 	}
-	if *showReadme {
+	if *showHelp || *showReadme {
 		_, err := fmt.Fprint(stdout, gitgud.README)
 		return err
 	}
@@ -98,9 +99,9 @@ Flags:
   --batch-size N
   --progress
   --version
-  --readme
+  --help, --readme
 
-Run 'git gud --readme' for complete documentation.`)
+Run 'git gud --help' for complete documentation.`)
 }
 
 var buildVersion string
