@@ -103,6 +103,49 @@ func TestDownload(t *testing.T) {
 	}
 }
 
+func TestDownloadFile(t *testing.T) {
+	repository := fixtureRepository(t)
+	target := t.TempDir()
+	if err := repository.Download(context.Background(), "Specs/0/1/2/Alpha.json", target, 4); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(filepath.Join(target, "Alpha.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "alpha\n" {
+		t.Fatalf("downloaded %q, want alpha", contents)
+	}
+	if _, err := os.Stat(filepath.Join(target, "Specs")); !os.IsNotExist(err) {
+		t.Fatalf("single-file download created repository path: %v", err)
+	}
+}
+
+func TestDownloadFileGlob(t *testing.T) {
+	repository := fixtureRepository(t)
+	target := t.TempDir()
+	if err := repository.Download(context.Background(), "Specs/*/*/*/*.json", target, 4); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(filepath.Join(target, "0", "1", "2", "Alpha.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "alpha\n" {
+		t.Fatalf("downloaded %q, want alpha", contents)
+	}
+	if _, err := os.Stat(filepath.Join(target, "f")); !os.IsNotExist(err) {
+		t.Fatalf("glob downloaded unmatched path: %v", err)
+	}
+}
+
+func TestDownloadFileGlobRequiresMatch(t *testing.T) {
+	repository := fixtureRepository(t)
+	if err := repository.Download(context.Background(), "Specs/**/*.md", t.TempDir(), 4); err == nil {
+		t.Fatal("expected unmatched glob to fail")
+	}
+}
+
 func TestDownloadFetchesRecursiveClosureOnce(t *testing.T) {
 	repository := fixtureRepository(t)
 	commander := &recordingCommander{}
@@ -144,6 +187,17 @@ func (commander *recordingCommander) Command(_ context.Context, command string, 
 	copy.Wants = append([]plumbing.Hash(nil), request.Wants...)
 	commander.requests = append(commander.requests, &copy)
 	return nil
+}
+
+func TestValidateTreeName(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "a/b", `a\b`, "a\x00b"} {
+		if err := validateTreeName(name); err == nil {
+			t.Errorf("validateTreeName(%q) succeeded", name)
+		}
+	}
+	if err := validateTreeName("valid name.json"); err != nil {
+		t.Fatalf("valid tree name rejected: %v", err)
+	}
 }
 
 func TestDownloadRejectsExistingSymlinkDirectory(t *testing.T) {

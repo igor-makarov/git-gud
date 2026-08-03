@@ -57,35 +57,54 @@ func (r *Repository) loadTrees(ctx context.Context, hashes []plumbing.Hash) (map
 	return trees, nil
 }
 
-func (r *Repository) resolveDirectory(ctx context.Context, value string) (plumbing.Hash, string, error) {
+func (r *Repository) resolvePath(ctx context.Context, value string) (Entry, error) {
 	cleaned, err := normalizeRepoPath(value)
 	if err != nil {
-		return plumbing.ZeroHash, "", err
+		return Entry{}, err
 	}
 	if cleaned == "" {
-		return r.rootHash, "", nil
+		return Entry{Mode: filemode.Dir, Hash: r.rootHash}, nil
 	}
 
 	hash := r.rootHash
-	for _, component := range strings.Split(cleaned, "/") {
+	components := strings.Split(cleaned, "/")
+	for index, component := range components {
 		trees, err := r.loadTrees(ctx, []plumbing.Hash{hash})
 		if err != nil {
-			return plumbing.ZeroHash, "", err
+			return Entry{}, err
 		}
 		var found *object.TreeEntry
-		for index := range trees[hash].Entries {
-			entry := &trees[hash].Entries[index]
+		for entryIndex := range trees[hash].Entries {
+			entry := &trees[hash].Entries[entryIndex]
 			if entry.Name == component {
 				found = entry
 				break
 			}
 		}
-		if found == nil || found.Mode != filemode.Dir {
-			return plumbing.ZeroHash, "", fmt.Errorf("directory %q not found", cleaned)
+		if found == nil {
+			return Entry{}, fmt.Errorf("path %q not found", cleaned)
 		}
-		hash = found.Hash
+		entry := Entry{Path: strings.Join(components[:index+1], "/"), Mode: found.Mode, Hash: found.Hash}
+		if index+1 == len(components) {
+			return entry, nil
+		}
+		if !entry.IsDir() {
+			return Entry{}, fmt.Errorf("path %q not found", cleaned)
+		}
+		hash = entry.Hash
 	}
-	return hash, cleaned, nil
+	panic("unreachable")
+}
+
+func (r *Repository) resolveDirectory(ctx context.Context, value string) (plumbing.Hash, string, error) {
+	entry, err := r.resolvePath(ctx, value)
+	if err != nil {
+		return plumbing.ZeroHash, "", err
+	}
+	if !entry.IsDir() {
+		return plumbing.ZeroHash, "", fmt.Errorf("directory %q not found", entry.Path)
+	}
+	return entry.Hash, entry.Path, nil
 }
 
 func sortedTreeEntries(tree *object.Tree) []object.TreeEntry {
@@ -94,6 +113,13 @@ func sortedTreeEntries(tree *object.Tree) []object.TreeEntry {
 		return entries[left].Name < entries[right].Name
 	})
 	return entries
+}
+
+func validateTreeName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") {
+		return fmt.Errorf("unsafe Git tree name %q", name)
+	}
+	return nil
 }
 
 func joinRepoPath(base, name string) string {

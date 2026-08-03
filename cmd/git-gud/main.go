@@ -92,7 +92,7 @@ func usage(writer io.Writer) {
 Commands:
   ls [-R|--recursive] [DIR]
   find [--from DIR] GLOB
-  download [-o|--output DIR] [--jobs N] DIR
+  download [-o|--output DIR] [--jobs N] PATH_OR_GLOB
 
 Flags:
   --cache-dir DIR

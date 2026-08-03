@@ -52,7 +52,7 @@ func Download(ctx context.Context, repository *remote.Repository, arguments []st
 		}
 	}
 	if len(positional) != 1 {
-		return fmt.Errorf("usage: git gud REPOSITORY download [-o DIR] [--jobs N] DIR")
+		return fmt.Errorf("usage: git gud REPOSITORY download [-o DIR] [--jobs N] PATH_OR_GLOB")
 	}
 	return repository.Download(ctx, positional[0], output, jobs)
 }

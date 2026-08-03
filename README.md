@@ -36,7 +36,7 @@ git gud --help
 ```text
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] ls [-R|--recursive] [DIR]
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] find [--from DIR] GLOB
-git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] DIR
+git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] PATH_OR_GLOB
 ```
 
 Global flags must precede `REPOSITORY`. Use `--` after command options when a
@@ -95,6 +95,25 @@ Recursively download a directory's contents into the current directory:
 git gud https://github.com/owner/repo.git download assets
 ```
 
+Download one file. Its basename is placed in the output directory:
+
+```sh
+git gud https://github.com/owner/repo.git download README.md
+```
+
+Download files matching a doublestar glob. Quote patterns to prevent shell
+expansion:
+
+```sh
+git gud https://github.com/CocoaPods/Specs.git download \
+  'Specs/*/*/*/Firebase*/*/Firebase*.json'
+```
+
+Glob output preserves paths relative to the fixed directory prefix before the
+first wildcard. The example therefore omits the leading `Specs/` directory in
+the destination. Directory matches are ignored, and a glob that matches no
+files is an error.
+
 Choose a destination and set the bounded extraction concurrency with `--jobs`
 (default: 8):
 
@@ -105,11 +124,12 @@ git gud https://github.com/owner/repo.git download \
   assets
 ```
 
-The source directory itself is not created in the destination; its contents are
-placed directly in the output directory. Fresh files are written directly and
-existing files are replaced atomically. Regular files, Git executable modes,
-and symbolic links are preserved. Existing output directories must be real
-directories rather than symbolic links. Git submodules are rejected.
+For an exact directory, the source directory itself is not created in the
+destination; its contents are placed directly in the output directory. Fresh
+files are written directly and existing files are replaced atomically. Regular
+files, Git executable modes, and symbolic links are preserved. Existing output
+directories must be real directories rather than symbolic links. Git submodules
+are rejected.
 
 Download overlays the destination. It does not remove destination entries that
 are absent from the selected Git snapshot, so reusing an output directory is
@@ -148,13 +168,14 @@ For every command, git-gud:
 3. lazily fetches only required tree object IDs in bounded batches for `ls`
    and `find`;
 4. fetches no blobs for `ls` or `find`;
-5. fetches the selected tree's complete recursive closure in one unfiltered
-   request for `download`, then retains all received objects.
+5. fetches an exact directory's complete recursive closure in one unfiltered
+   request for `download`, or only selected blobs for a file or glob.
 
 A scoped path or fixed-prefix glob therefore avoids unrelated subtrees. Broad
-patterns such as `**` necessarily inspect all trees under their scope. A
-`download` includes only the selected directory's closure, not unrelated trees
-or commit history. Cached objects are retained for later commands.
+patterns such as `**` necessarily inspect all trees under their scope. An exact
+directory download includes only that directory's closure, while file and glob
+downloads omit unmatched blobs. Neither includes unrelated commit history.
+Cached objects are retained for later commands.
 
 ## Requirements and limitations
 

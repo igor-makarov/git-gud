@@ -80,6 +80,9 @@ func (r *Repository) Find(ctx context.Context, scope, pattern string, emit func(
 					enqueue(state{hash: current.hash, path: current.path, part: current.part + 1})
 				}
 				for _, item := range entries {
+					if err := validateTreeName(item.Name); err != nil {
+						return err
+					}
 					entry := Entry{Path: joinRepoPath(current.path, item.Name), Mode: item.Mode, Hash: item.Hash}
 					if current.part+1 == len(parts) {
 						if err := emitOnce(entry); err != nil {
@@ -94,6 +97,9 @@ func (r *Repository) Find(ctx context.Context, scope, pattern string, emit func(
 			}
 
 			for _, item := range entries {
+				if err := validateTreeName(item.Name); err != nil {
+					return err
+				}
 				matches, err := doublestar.Match(segment, item.Name)
 				if err != nil {
 					return fmt.Errorf("match glob segment %q: %w", segment, err)

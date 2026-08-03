@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,14 +17,11 @@ import (
 // DefaultDownloadJobs bounds concurrent blob extraction and file writes.
 const DefaultDownloadJobs = 8
 
-// Download materializes the contents of sourceDirectory into targetDirectory.
-// The selected tree's recursive closure is fetched before a bounded worker
-// pool extracts its blobs.
-func (r *Repository) Download(ctx context.Context, sourceDirectory, targetDirectory string, jobs int) (result error) {
-	rootHash, rootPath, err := r.resolveDirectory(ctx, sourceDirectory)
-	if err != nil {
-		return err
-	}
+// Download materializes a directory, file, or file glob into targetDirectory.
+// Exact directories fetch their recursive closure. Exact files and globs fetch
+// only selected blobs. Blob extraction is handled by a bounded worker pool.
+func (r *Repository) Download(ctx context.Context, source, targetDirectory string, jobs int) error {
+	entry, exactErr := r.resolvePath(ctx, source)
 	if targetDirectory == "" {
 		return fmt.Errorf("target directory is empty")
 	}
@@ -37,20 +35,66 @@ func (r *Repository) Download(ctx context.Context, sourceDirectory, targetDirect
 	if jobs <= 0 {
 		jobs = DefaultDownloadJobs
 	}
-	if err := r.ensureClosure(ctx, rootHash); err != nil {
+
+	if exactErr == nil {
+		if entry.IsDir() {
+			if err := r.ensureClosure(ctx, entry.Hash); err != nil {
+				return err
+			}
+			return r.downloadDirectory(ctx, entry.Hash, entry.Path, targetRoot, jobs)
+		}
+		destination, err := downloadDestination(targetRoot, path.Base(entry.Path))
+		if err != nil {
+			return err
+		}
+		return r.downloadFiles(ctx, jobs, func(_ context.Context, enqueue func(pendingFile) error) error {
+			return enqueue(pendingFile{entry: entry, destination: destination})
+		})
+	}
+	if !strings.ContainsAny(source, "*?[{") {
+		return exactErr
+	}
+
+	scope, pattern, err := splitDownloadGlob(source)
+	if err != nil {
 		return err
 	}
+	matched := 0
+	return r.downloadFiles(ctx, jobs, func(workCtx context.Context, enqueue func(pendingFile) error) error {
+		if err := r.Find(workCtx, scope, pattern, func(entry Entry) error {
+			if entry.IsDir() {
+				return nil
+			}
+			relative, err := pathWithinScope(entry.Path, scope)
+			if err != nil {
+				return err
+			}
+			destination, err := downloadDestination(targetRoot, relative)
+			if err != nil {
+				return err
+			}
+			matched++
+			return enqueue(pendingFile{entry: entry, destination: destination})
+		}); err != nil {
+			return err
+		}
+		if matched == 0 {
+			return fmt.Errorf("glob %q matched no files", source)
+		}
+		return nil
+	})
+}
 
-	type pendingDirectory struct {
-		hash        plumbing.Hash
-		path        string
-		destination string
-	}
-	type pendingFile struct {
-		entry       Entry
-		destination string
-	}
+type pendingFile struct {
+	entry       Entry
+	destination string
+}
 
+func (r *Repository) downloadFiles(
+	ctx context.Context,
+	jobs int,
+	produce func(context.Context, func(pendingFile) error) error,
+) (result error) {
 	workCtx, cancel := context.WithCancel(ctx)
 	tasks := make(chan pendingFile, jobs*4)
 	var workers sync.WaitGroup
@@ -95,13 +139,7 @@ func (r *Repository) Download(ctx context.Context, sourceDirectory, targetDirect
 		}
 	}()
 
-	queue := []pendingDirectory{{
-		hash:        rootHash,
-		path:        rootPath,
-		destination: targetRoot,
-	}}
 	files := make([]pendingFile, 0, r.batchSize)
-
 	flushFiles := func() error {
 		for len(files) > 0 {
 			count := min(r.batchSize, len(files))
@@ -131,56 +169,119 @@ func (r *Repository) Download(ctx context.Context, sourceDirectory, targetDirect
 				}
 			}
 		}
-		files = nil
+		files = files[:0]
 		return nil
 	}
+	enqueue := func(file pendingFile) error {
+		files = append(files, file)
+		if len(files) >= r.batchSize {
+			return flushFiles()
+		}
+		return nil
+	}
+	if err := produce(workCtx, enqueue); err != nil {
+		if workerErr := getWorkerError(); workerErr != nil {
+			return workerErr
+		}
+		return err
+	}
+	return flushFiles()
+}
 
-	for len(queue) > 0 {
-		if err := workCtx.Err(); err != nil {
-			if workerErr := getWorkerError(); workerErr != nil {
-				return workerErr
+func (r *Repository) downloadDirectory(ctx context.Context, rootHash plumbing.Hash, rootPath, targetRoot string, jobs int) error {
+	type pendingDirectory struct {
+		hash        plumbing.Hash
+		path        string
+		destination string
+	}
+	queue := []pendingDirectory{{hash: rootHash, path: rootPath, destination: targetRoot}}
+	return r.downloadFiles(ctx, jobs, func(workCtx context.Context, enqueue func(pendingFile) error) error {
+		for len(queue) > 0 {
+			if err := workCtx.Err(); err != nil {
+				return err
 			}
-			return err
-		}
-		count := min(r.batchSize, len(queue))
-		batch := queue[:count]
-		queue = queue[count:]
-		hashes := make([]plumbing.Hash, len(batch))
-		for index := range batch {
-			hashes[index] = batch[index].hash
-		}
-		trees, err := r.loadTrees(workCtx, hashes)
-		if err != nil {
-			return err
-		}
-		for _, directory := range batch {
-			for _, item := range sortedTreeEntries(trees[directory.hash]) {
-				if item.Name == "." || item.Name == ".." || strings.ContainsAny(item.Name, "/\x00") {
-					return fmt.Errorf("unsafe Git tree name %q", item.Name)
-				}
-				destination := filepath.Join(directory.destination, item.Name)
-				entry := Entry{Path: joinRepoPath(directory.path, item.Name), Mode: item.Mode, Hash: item.Hash}
-				if entry.IsDir() {
-					if err := ensureChildDirectory(destination); err != nil {
+			count := min(r.batchSize, len(queue))
+			batch := queue[:count]
+			queue = queue[count:]
+			hashes := make([]plumbing.Hash, len(batch))
+			for index := range batch {
+				hashes[index] = batch[index].hash
+			}
+			trees, err := r.loadTrees(workCtx, hashes)
+			if err != nil {
+				return err
+			}
+			for _, directory := range batch {
+				for _, item := range sortedTreeEntries(trees[directory.hash]) {
+					if err := validateTreeName(item.Name); err != nil {
 						return err
 					}
-					queue = append(queue, pendingDirectory{
-						hash:        entry.Hash,
-						path:        entry.Path,
-						destination: destination,
-					})
-				} else {
-					files = append(files, pendingFile{entry: entry, destination: destination})
+					destination := filepath.Join(directory.destination, item.Name)
+					entry := Entry{Path: joinRepoPath(directory.path, item.Name), Mode: item.Mode, Hash: item.Hash}
+					if entry.IsDir() {
+						if err := ensureChildDirectory(destination); err != nil {
+							return err
+						}
+						queue = append(queue, pendingDirectory{hash: entry.Hash, path: entry.Path, destination: destination})
+					} else if err := enqueue(pendingFile{entry: entry, destination: destination}); err != nil {
+						return err
+					}
 				}
 			}
 		}
-		if len(files) >= r.batchSize {
-			if err := flushFiles(); err != nil {
-				return err
+		return nil
+	})
+}
+
+func splitDownloadGlob(value string) (string, string, error) {
+	value = strings.Trim(strings.ReplaceAll(value, "\\", "/"), "/")
+	parts := strings.Split(value, "/")
+	firstGlob := -1
+	for index, part := range parts {
+		if strings.ContainsAny(part, "*?[{") {
+			firstGlob = index
+			break
+		}
+	}
+	if firstGlob < 0 {
+		return "", "", fmt.Errorf("glob pattern is empty")
+	}
+	scope, err := normalizeRepoPath(strings.Join(parts[:firstGlob], "/"))
+	if err != nil {
+		return "", "", err
+	}
+	return scope, strings.Join(parts[firstGlob:], "/"), nil
+}
+
+func pathWithinScope(repositoryPath, scope string) (string, error) {
+	if scope == "" {
+		return repositoryPath, nil
+	}
+	prefix := scope + "/"
+	if !strings.HasPrefix(repositoryPath, prefix) {
+		return "", fmt.Errorf("path %q is outside download scope %q", repositoryPath, scope)
+	}
+	return strings.TrimPrefix(repositoryPath, prefix), nil
+}
+
+func downloadDestination(targetRoot, relative string) (string, error) {
+	parts := strings.Split(relative, "/")
+	if len(parts) == 0 {
+		return "", fmt.Errorf("download path is empty")
+	}
+	current := targetRoot
+	for index, part := range parts {
+		if err := validateTreeName(part); err != nil {
+			return "", err
+		}
+		current = filepath.Join(current, part)
+		if index+1 < len(parts) {
+			if err := ensureChildDirectory(current); err != nil {
+				return "", err
 			}
 		}
 	}
-	return flushFiles()
+	return current, nil
 }
 
 func (r *Repository) writeEntry(destination string, entry Entry) error {
