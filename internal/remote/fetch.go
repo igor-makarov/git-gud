@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -32,6 +33,37 @@ func (response *fetchResponse) Decode(reader io.Reader) error {
 	}
 	if err := packfile.UpdateObjectStorage(response.storage, demuxer); err != nil {
 		return fmt.Errorf("store fetched pack: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ensureClosure(ctx context.Context, hash plumbing.Hash) error {
+	if r.commander == nil || r.cachePath == "" {
+		return nil
+	}
+	marker := plumbing.ReferenceName("refs/git-gud/closures/" + hash.String())
+	if reference, err := r.repo.Storer.Reference(marker); err == nil && reference.Hash() == hash {
+		return nil
+	} else if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return fmt.Errorf("read closure marker: %w", err)
+	}
+
+	arguments := &packp.FetchArgs{
+		Wants:      []plumbing.Hash{hash},
+		Done:       true,
+		OFSDelta:   true,
+		NoProgress: r.progress == nil,
+		Shallows:   []plumbing.Hash{r.commitHash},
+	}
+	response := &fetchResponse{storage: r.repo.Storer, progress: r.progress}
+	if err := r.commander.Command(ctx, "fetch", arguments, response); err != nil {
+		return fmt.Errorf("fetch recursive closure for Git tree %s: %w", hash, err)
+	}
+	if err := markPromisorPacks(r.cachePath); err != nil {
+		return err
+	}
+	if err := r.repo.Storer.SetReference(plumbing.NewHashReference(marker, hash)); err != nil {
+		return fmt.Errorf("write closure marker: %w", err)
 	}
 	return nil
 }

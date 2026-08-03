@@ -17,7 +17,8 @@ import (
 const DefaultDownloadJobs = 8
 
 // Download materializes the contents of sourceDirectory into targetDirectory.
-// Blob contents are fetched in batches and extracted by a bounded worker pool.
+// The selected tree's recursive closure is fetched before a bounded worker
+// pool extracts its blobs.
 func (r *Repository) Download(ctx context.Context, sourceDirectory, targetDirectory string, jobs int) (result error) {
 	rootHash, rootPath, err := r.resolveDirectory(ctx, sourceDirectory)
 	if err != nil {
@@ -35,6 +36,9 @@ func (r *Repository) Download(ctx context.Context, sourceDirectory, targetDirect
 	}
 	if jobs <= 0 {
 		jobs = DefaultDownloadJobs
+	}
+	if err := r.ensureClosure(ctx, rootHash); err != nil {
+		return err
 	}
 
 	type pendingDirectory struct {

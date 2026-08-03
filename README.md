@@ -144,13 +144,16 @@ For every command, git-gud:
 
 1. negotiates smart protocol v2 and resolves the requested ref;
 2. fetches a missing commit at depth one with `filter tree:0`;
-3. lazily fetches only required tree object IDs in bounded batches;
+3. lazily fetches only required tree object IDs in bounded batches for `ls`
+   and `find`;
 4. fetches no blobs for `ls` or `find`;
-5. fetches and retains required blobs for `download`.
+5. fetches the selected tree's complete recursive closure in one unfiltered
+   request for `download`, then retains all received objects.
 
 A scoped path or fixed-prefix glob therefore avoids unrelated subtrees. Broad
-patterns such as `**` necessarily inspect all trees under their scope. Cached
-objects are retained for later commands.
+patterns such as `**` necessarily inspect all trees under their scope. A
+`download` includes only the selected directory's closure, not unrelated trees
+or commit history. Cached objects are retained for later commands.
 
 ## Requirements and limitations
 

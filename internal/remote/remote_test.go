@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v6/storage/memory"
 )
 
@@ -100,6 +101,49 @@ func TestDownload(t *testing.T) {
 	if err := repository.Download(context.Background(), "Specs", target, 4); err != nil {
 		t.Fatalf("overwrite download: %v", err)
 	}
+}
+
+func TestDownloadFetchesRecursiveClosureOnce(t *testing.T) {
+	repository := fixtureRepository(t)
+	commander := &recordingCommander{}
+	repository.commander = commander
+	repository.cachePath = t.TempDir()
+
+	root, err := object.GetTree(repository.repo.Storer, repository.rootHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := root.Entries[0].Hash
+	for range 2 {
+		if err := repository.Download(context.Background(), "Specs", t.TempDir(), 4); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(commander.requests) != 1 {
+		t.Fatalf("recursive closure fetches = %d, want 1", len(commander.requests))
+	}
+	request := commander.requests[0]
+	if len(request.Wants) != 1 || request.Wants[0] != want {
+		t.Fatalf("recursive closure wants = %v, want [%s]", request.Wants, want)
+	}
+	if request.Filter != "" {
+		t.Fatalf("recursive closure filter = %q, want no filter", request.Filter)
+	}
+}
+
+type recordingCommander struct {
+	requests []*packp.FetchArgs
+}
+
+func (commander *recordingCommander) Command(_ context.Context, command string, arguments packp.CommandArgs, _ packp.Decoder) error {
+	if command != "fetch" {
+		return nil
+	}
+	request := arguments.(*packp.FetchArgs)
+	copy := *request
+	copy.Wants = append([]plumbing.Hash(nil), request.Wants...)
+	commander.requests = append(commander.requests, &copy)
+	return nil
 }
 
 func TestDownloadRejectsExistingSymlinkDirectory(t *testing.T) {
