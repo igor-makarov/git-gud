@@ -1,8 +1,8 @@
 # git-gud
 
-`git gud` lists, finds, and downloads paths from remote Git repositories without
-requiring a full clone. It uses Git smart protocol v2 through go-git and never
-runs a `git` subprocess.
+`git gud` lists, finds, prints, and downloads paths from remote Git repositories
+without requiring a full clone. It uses Git smart protocol v2 through go-git
+and never runs a `git` subprocess.
 
 ## Install
 
@@ -36,6 +36,7 @@ git gud --help
 ```text
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] ls [-R|--recursive] [DIR]
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] find [--from DIR] GLOB
+git gud [GLOBAL FLAGS] REPOSITORY[@REF] cat PATH
 git gud [GLOBAL FLAGS] REPOSITORY[@REF] download [-o|--output DIR] [--jobs N] PATH_OR_GLOB
 ```
 
@@ -86,6 +87,20 @@ git gud https://github.com/owner/repo.git find --from assets '**/icon-?.svg'
 `--from` defaults to the repository root and resolves the scope before matching,
 so unrelated trees are not requested. Patterns are interpreted relative to the
 scope, while matches are printed as paths from the repository root.
+
+### Cat
+
+Write one file from the selected snapshot directly to standard output without
+creating a file on disk:
+
+```sh
+git gud https://github.com/owner/repo.git cat README.md
+git gud https://github.com/owner/repo.git cat config/default.json | jq .
+```
+
+`cat` accepts an exact file path rather than a glob. Directories and Git
+submodules are rejected. As with `download`, the blob is fetched lazily and the
+remote snapshot remains pinned to the commit resolved when the command starts.
 
 ### Download
 
@@ -168,7 +183,8 @@ For every command, git-gud:
 3. lazily fetches only required tree object IDs in bounded batches for `ls`
    and `find`;
 4. fetches no blobs for `ls` or `find`;
-5. fetches an exact directory's complete recursive closure in one unfiltered
+5. fetches only the selected blob for `cat`;
+6. fetches an exact directory's complete recursive closure in one unfiltered
    request for `download`, or only selected blobs for a file or glob.
 
 A scoped path or fixed-prefix glob therefore avoids unrelated subtrees. Broad
