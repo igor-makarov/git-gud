@@ -3,6 +3,7 @@ package remote
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -119,6 +120,25 @@ func TestCatRejectsDirectory(t *testing.T) {
 	if err := repository.Cat(context.Background(), "Specs", &bytes.Buffer{}); err == nil {
 		t.Fatal("expected directory to be rejected")
 	}
+}
+
+func TestCatStopsAfterCancellation(t *testing.T) {
+	repository := fixtureRepository(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	writer := cancelingWriter{cancel: cancel}
+	err := repository.Cat(ctx, "Specs/0/1/2/Alpha.json", writer)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Cat error = %v, want context canceled", err)
+	}
+}
+
+type cancelingWriter struct {
+	cancel context.CancelFunc
+}
+
+func (w cancelingWriter) Write(contents []byte) (int, error) {
+	w.cancel()
+	return len(contents), nil
 }
 
 func TestDownloadFile(t *testing.T) {

@@ -33,8 +33,27 @@ func (r *Repository) Cat(ctx context.Context, source string, writer io.Writer) e
 		return fmt.Errorf("open blob for %q: %w", entry.Path, err)
 	}
 	defer reader.Close()
-	if _, err := io.Copy(writer, reader); err != nil {
+	if _, err := io.Copy(contextWriter{ctx: ctx, writer: writer}, reader); err != nil {
 		return fmt.Errorf("write %q to stdout: %w", entry.Path, err)
 	}
 	return nil
+}
+
+type contextWriter struct {
+	ctx    context.Context
+	writer io.Writer
+}
+
+func (w contextWriter) Write(contents []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	written, err := w.writer.Write(contents)
+	if err != nil {
+		return written, err
+	}
+	if err := w.ctx.Err(); err != nil {
+		return written, err
+	}
+	return written, nil
 }
