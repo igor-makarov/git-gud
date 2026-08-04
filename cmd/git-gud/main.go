@@ -78,6 +78,8 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 		return command.List(ctx, repository, args[2:], stdout)
 	case "find":
 		return command.Find(ctx, repository, args[2:], stdout)
+	case "cat":
+		return command.Cat(ctx, repository, args[2:], stdout)
 	case "download":
 		return command.Download(ctx, repository, args[2:])
 	default:
@@ -92,6 +94,7 @@ func usage(writer io.Writer) {
 Commands:
   ls [-R|--recursive] [DIR]
   find [--from DIR] GLOB
+  cat PATH
   download [-o|--output DIR] [--jobs N] PATH_OR_GLOB
 
 Flags:

@@ -103,6 +103,24 @@ func TestDownload(t *testing.T) {
 	}
 }
 
+func TestCat(t *testing.T) {
+	repository := fixtureRepository(t)
+	var output bytes.Buffer
+	if err := repository.Cat(context.Background(), "Specs/0/1/2/Alpha.json", &output); err != nil {
+		t.Fatal(err)
+	}
+	if got := output.String(); got != "alpha\n" {
+		t.Fatalf("Cat output = %q, want %q", got, "alpha\\n")
+	}
+}
+
+func TestCatRejectsDirectory(t *testing.T) {
+	repository := fixtureRepository(t)
+	if err := repository.Cat(context.Background(), "Specs", &bytes.Buffer{}); err == nil {
+		t.Fatal("expected directory to be rejected")
+	}
+}
+
 func TestDownloadFile(t *testing.T) {
 	repository := fixtureRepository(t)
 	target := t.TempDir()
