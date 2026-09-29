@@ -89,3 +89,12 @@ jobs:
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
           subject-path: ${{ steps.attestation_subjects.outputs.subjects }}
+
+      - name: Sign release manifest with packslip
+        uses: jdx/packslip@v1
+        with:
+          artifacts: dist/git-gud_*.tar.gz dist/git-gud_*.zip
+          bin: git-gud
+          attest: link
+          resources: |
+            skill/git-gud=exec:git-gud --readme

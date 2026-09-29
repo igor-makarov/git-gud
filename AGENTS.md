@@ -57,5 +57,9 @@ filesystem behavior. Keep command parsing tests close to `internal/command` or
   CycloneDX SBOMs, checksums, and attestations to GitHub Releases.
 - `.goreleaser.yaml` builds stripped Linux, macOS, and Windows binaries. Keep its
   linker-injected version synchronized with `buildVersion` in `cmd/git-gud`.
+- `release.yml` signs a packslip release manifest (`jdx/packslip@v1`) after
+  attestation and uploads `packslip.sigstore.json` to the release. The skill
+  resource uses an `exec` source (`git-gud --readme`), so no bundled SKILL.md
+  exists; the embedded README is the skill content.
 - `go install ...@latest` derives the displayed version from Go build metadata;
   no generated version file is needed for source installs.
