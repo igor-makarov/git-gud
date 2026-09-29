@@ -26,6 +26,9 @@ jobs:
       contents: write
       attestations: write
       id-token: write
+    outputs:
+      tag: ${{ steps.validate_tag.outputs.tag }}
+      commit: ${{ steps.validate_tag.outputs.commit }}
 
     steps:
       - name: Check out release tag
@@ -41,6 +44,7 @@ jobs:
           cache: true
 
       - name: Validate release tag
+        id: validate_tag
         env:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         shell: bash
@@ -52,6 +56,8 @@ jobs:
           git fetch --force --tags origin
           test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: go test ./...
@@ -90,11 +96,76 @@ jobs:
         with:
           subject-path: ${{ steps.attestation_subjects.outputs.subjects }}
 
+  packslip:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download the skill archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "${{ needs.release.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'git-gud-skill.tar.gz' \
+            --output dist/git-gud-skill.tar.gz
+
       - name: Sign release manifest with packslip
-        uses: jdx/packslip@v1
+        id: packslip
+        uses: jdx/packslip@87479dfc6443253dff69601cace5fc6ea07e6df5 # v1
         with:
-          artifacts: dist/git-gud_*.tar.gz dist/git-gud_*.zip
+          tag: ${{ needs.release.outputs.tag }}
+          commit: ${{ needs.release.outputs.commit }}
+          download: git-gud_*.tar.gz git-gud_*.zip
           bin: git-gud
           attest: link
           resources: |
-            skill/git-gud=exec:git-gud --readme
+            skill/git-gud=asset:dist/git-gud-skill.tar.gz
+          upload: false
+
+      - name: Save the signed bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: packslip-bundle
+          path: ${{ steps.packslip.outputs.bundle }}
+          if-no-files-found: error
+
+  publish-packslip:
+    needs: [packslip, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the signed bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: packslip-bundle
+          path: packslip
+
+      - name: Upload the signed bundle to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -f packslip/packslip.sigstore.json
+          gh release upload "${{ needs.release.outputs.tag }}" packslip/packslip.sigstore.json \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Build and upload the skill archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p skill/git-gud
+          {
+            printf -- '---\nname: git-gud\n'
+            printf -- 'description: List, find, and download paths from remote Git repositories without a full clone, using Git smart protocol v2.\n'
+            printf -- '---\n\n'
+            cat README.md
+          } > skill/git-gud/SKILL.md
+          tar -czf dist/git-gud-skill.tar.gz -C skill git-gud
+          gh release upload "$RELEASE_TAG" dist/git-gud-skill.tar.gz --repo "$GITHUB_REPOSITORY" --clobber
