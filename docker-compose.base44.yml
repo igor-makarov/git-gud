@@ -1,0 +1,8 @@
+services:
+  git-gud:
+    image: golang:1.26
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: ["sh", "-ec", "go mod download && go build -o /workspace/git-gud ./cmd/git-gud && go test -race ./... && go vet ./... && echo 'BUILD AND TESTS PASSED' && tail -f /dev/null"]
+    restart: "no"

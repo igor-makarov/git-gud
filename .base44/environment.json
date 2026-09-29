@@ -1,0 +1,7 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [],
+  "notes": "CLI-only Go project (git-gud). No web server or frontend — the browser preview cannot render a running app. The compose service builds the binary, runs tests, and stays alive so the user can exec in and run the CLI. Verify with: docker compose -f docker-compose.base44.yml exec -T git-gud /workspace/git-gud --version"
+}
