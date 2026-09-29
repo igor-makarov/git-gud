@@ -1,0 +1,43 @@
+services:
+  web:
+    image: golang:1.26
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go-cache:/root/.cache/go-build
+      - go-mod:/go/pkg/mod
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    command:
+      - sh
+      - -ec
+      - |
+        go build ./cmd/git-gud
+        go build -o /tmp/preview ./cmd/preview
+        /tmp/preview &
+        PID=$$!
+        find . \( -name '*.go' -o -name 'README.md' -o -name 'go.mod' \) -not -path './.git/*' | xargs md5sum > /tmp/h 2>/dev/null || true
+        while true; do
+          sleep 2
+          find . \( -name '*.go' -o -name 'README.md' -o -name 'go.mod' \) -not -path './.git/*' | xargs md5sum > /tmp/h2 2>/dev/null || true
+          if ! diff -q /tmp/h /tmp/h2 >/dev/null 2>&1; then
+            cp /tmp/h2 /tmp/h
+            kill $$PID 2>/dev/null || true
+            wait $$PID 2>/dev/null || true
+            go build ./cmd/git-gud && go build -o /tmp/preview ./cmd/preview && /tmp/preview &
+            PID=$$!
+          fi
+        done
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
+
+volumes:
+  go-cache:
+  go-mod:
